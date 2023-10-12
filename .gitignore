@@ -1,7 +1,5 @@
 .env
 data/
-**/__pycache__
 *.parquet
-*.shp
-*.pkl
-.TODOS
+**/__pycache__
+tests/
