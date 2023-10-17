@@ -43,110 +43,128 @@ def download_one_file_of_raw_data(year: int, month: int) -> Path:
 
 def validate_raw_data(rides: pd.DataFrame, year: int, month: int) -> pd.DataFrame:
     """
-    Validate and filter the raw data based on the given year and month.
+    Validate the raw data by removing rows with pickup_datetimes outside their valid range.
     
     Parameters:
-    - rides (pd.DataFrame): DataFrame containing the raw ride data.
-    - year (int): The year to be used for filtering.
-    - month (int): The month to be used for filtering.
+    - rides (pd.DataFrame): The raw taxi rides data.
+    - year (int): The year for validation.
+    - month (int): The month for validation.
     
     Returns:
-    - pd.DataFrame: DataFrame containing the validated and filtered ride data.
+    - pd.DataFrame: The validated data.
     """
+    # Define the valid date range for the data
     this_month_start = f"{year}-{month:02d}-01"
-    next_month_start = f"{year}-{month:02d}-01" if month < 12 else f"{year + 1}-01-01"
+    next_month_start = f"{year}-{month+1:02d}-01" if month < 12 else f"{year+1}-01-01"
     
-    # Filtering the data based on the specified year and month
+    # Filter the data based on the valid date range
     rides = rides[rides.pickup_datetime >= this_month_start]
     rides = rides[rides.pickup_datetime < next_month_start]
 
     return rides
 
-
 def load_raw_data(year: int, months: Optional[List[int]] = None) -> pd.DataFrame:
     """
-    Load raw data either from local storage or by downloading it, 
-    and then validate and filter the data.
+    Load raw taxi rides data for a given year and a list of months.
     
     Parameters:
-    - year (int): The year of the desired data.
-    - months (Optional[List[int]]): List of months of the desired data.
+    - year (int): The year for which the data is to be loaded.
+    - months (Optional[List[int]]): List of months for which the data is to be loaded. If None, data for all months is loaded.
     
     Returns:
-    - pd.DataFrame: DataFrame containing the loaded, validated, and filtered ride data.
+    - pd.DataFrame: The loaded data.
     """
     rides = pd.DataFrame()
 
+    # If no specific months are provided, load data for all months
     if months is None:
         months = list(range(1, 13))
-    elif isinstance(months, int):
-        months = [months]
 
-    # Looping through each specified month
+    # Iterate over each month
     for month in months:
-        local_file = RAW_DATA_DIR / f"rides_{year}-{month:02d}.parquet"
+        local_file = RAW_DATA_DIR/f"rides_{year}-{month:02d}.parquet"
         
-        # Check if the file already exists locally
+        # If the data file doesn't exist locally, download it
         if not local_file.exists():
             try:
-                # Try downloading the file if it doesn't exist locally
                 print(f"Downloading file {year}-{month:02d}")
                 download_one_file_of_raw_data(year, month)
             except:
-                print(f"{year}-{month:02d} file is not available.")
+                print(f"{year}-{month:02d} file is not available or failed to download")
                 continue
         else:
-            print(f"File {year}-{month:02d} already in local storage")
+            print(f"File {year}-{month:02d} was already in local storage")
 
-        # Load, validate, and concatenate the data
+        # Try to load the data from the local file
+        try:
+            rides_one_month = pd.read_parquet(local_file)
+        except FileNotFoundError:
+            print(f"Warning: Expected file {local_file} not found. Skipping month {month}.")
+            continue
+
+        # Load the data from the local file
         rides_one_month = pd.read_parquet(local_file)
+
+        # Rename columns for consistency
         rides_one_month = rides_one_month[["tpep_pickup_datetime", "PULocationID"]]
         rides_one_month.rename(columns={
             "tpep_pickup_datetime": "pickup_datetime",
             "PULocationID": "pickup_location_id",
         }, inplace=True)
-        
+
+        # Validate the loaded data
         rides_one_month = validate_raw_data(rides_one_month, year, month)
+
+        # Append the loaded data to the main DataFrame
         rides = pd.concat([rides, rides_one_month])
 
+    # Filter the data to keep only the required columns
     rides = rides[["pickup_datetime", "pickup_location_id"]]
 
     return rides
 
-
 def add_missing_slots(agg_rides: pd.DataFrame) -> pd.DataFrame:
     """
-    Fill in missing hourly slots for each pickup location with zero rides.
+    Fill in missing hourly time slots for each unique pickup_location_id.
+    
     Parameters:
-    - agg_rides (pd.DataFrame): DataFrame with aggregated ride counts.
+    - agg_rides (pd.DataFrame): DataFrame containing aggregated ride data with columns 'pickup_location_id', 'pickup_hour', and 'rides'.
+    
     Returns:
-    - pd.DataFrame: DataFrame with missing hourly slots filled.
+    - pd.DataFrame: DataFrame with missing hourly slots filled with 0 rides.
     """
     
-    # Get unique location IDs
+    # Extract unique location IDs
     location_ids = agg_rides["pickup_location_id"].unique()
-
-    # Create a full hourly range based on the min and max pickup hours
+    
+    # Create a complete range of hourly datetime values between the minimum and maximum pickup hours
     full_range = pd.date_range(
-        agg_rides["pickup_hour"].min(), 
-        agg_rides["pickup_hour"].max(), freq="H"
+        agg_rides["pickup_hour"].min(), agg_rides["pickup_hour"].max(), freq="H"
     )
     
+    # Initialize an empty DataFrame to store the final output
     output = pd.DataFrame()
-
-    # Loop through each location ID to fill missing hours
+    
+    # Iterate over each unique location ID with a progress bar
     for location_id in tqdm(location_ids):
-        agg_rides_i = agg_rides.loc[agg_rides.pickup_location_id == location_id, ['pickup_hour', 'rides']]
-
+        
+        # Filter the DataFrame for the current location ID
+        agg_rides_i = agg_rides.loc[agg_rides.pickup_location_id == location_id, ["pickup_hour", "rides"]]
+        
+        # Set 'pickup_hour' as the index and ensure it's of type DatetimeIndex
         agg_rides_i.set_index("pickup_hour", inplace=True)
         agg_rides_i.index = pd.DatetimeIndex(agg_rides_i.index)
+        
+        # Reindex the DataFrame to the full hourly range, filling missing hours with 0 rides
         agg_rides_i = agg_rides_i.reindex(full_range, fill_value=0)
-
+        
+        # Add back the 'pickup_location_id' column
         agg_rides_i["pickup_location_id"] = location_id
-
+        
+        # Concatenate the processed data to the output DataFrame
         output = pd.concat([output, agg_rides_i])
-
-    # Reset index and rename columns for the final output
+    
+    # Reset the index and rename the index column back to 'pickup_hour'
     output = output.reset_index().rename(columns={"index": "pickup_hour"})
 
     return output
