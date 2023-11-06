@@ -11,6 +11,17 @@ logger = get_logger()
 
 @dataclass
 class FeatureGroupConfig:
+    """
+    A data class representing the configuration of a feature group.
+    
+    Attributes:
+        name (str): The name of the feature group.
+        version (int): The version of the feature group.
+        description (str): A brief description of the feature group.
+        primary_key (List[str]): A list of columns that will act as primary keys.
+        event_time (str): The event time column name.
+        online_enabled (Optional[bool]): Flag to enable online serving. Defaults to False.
+    """
     name: str
     version: int
     description: str
@@ -20,14 +31,27 @@ class FeatureGroupConfig:
 
 @dataclass
 class FeatureViewConfig:
+    """
+    A data class representing the configuration of a feature view.
+    
+    Attributes:
+        name (str): The name of the feature view.
+        version (str): The version of the feature view.
+        feature_group (FeatureGroupConfig): The feature group configuration that this view is based on.
+    """
     name: str
     version: str
     feature_group: FeatureGroupConfig
 
 def get_feature_store() -> hsfs.feature_store.FeatureStore:
-
+    """
+    Logs into the Hopsworks project and retrieves the feature store.
+    
+    Returns:
+        hsfs.feature_store.FeatureStore: The feature store of the Hopsworks project.
+    """
     project = hopsworks.login(
-        projetc=config.HOPSWORKS_PROJECT_NAME,
+        project=config.HOPSWORKS_PROJECT_NAME,
         api_key_value=config.HOPSWORKS_API_KEY
     )
     return project.get_feature_store()
@@ -35,7 +59,15 @@ def get_feature_store() -> hsfs.feature_store.FeatureStore:
 def get_or_create_feature_group(
         feature_group_metadata: FeatureGroupConfig
         ) -> hsfs.feature_group.FeatureGroup:
+    """
+    Retrieves or creates a feature group in the feature store based on the provided metadata.
     
+    Args:
+        feature_group_metadata (FeatureGroupConfig): The metadata for the feature group.
+        
+    Returns:
+        hsfs.feature_group.FeatureGroup: The retrieved or newly created feature group.
+    """
     return get_feature_store().get_or_create_feature_group(
         name=feature_group_metadata.name,
         version=feature_group_metadata.version,
@@ -46,7 +78,15 @@ def get_or_create_feature_group(
     )
 
 def get_or_create_feature_view(feature_view_metadata: FeatureViewConfig) -> hsfs.feature_view.FeatureView:
-
+    """
+    Retrieves or creates a feature view in the feature store based on the provided metadata.
+    
+    Args:
+        feature_view_metadata (FeatureViewConfig): The metadata for the feature view.
+        
+    Returns:
+        hsfs.feature_view.FeatureView: The retrieved or newly created feature view.
+    """
     feature_store = get_feature_store()
 
     feature_group = feature_store.get_feature_group(
@@ -54,15 +94,17 @@ def get_or_create_feature_view(feature_view_metadata: FeatureViewConfig) -> hsfs
         version=feature_view_metadata.feature_group.version
     )
 
+    # Attempt to create a feature view if it doesn't exist
     try:
         feature_store.create_feature_view(
             name=feature_view_metadata.name,
             version=feature_view_metadata.version,
             query=feature_group.select_all()
         )
-    except:
-        logger.info("Feature view already exists, skipping creation.")
+    except Exception as e:
+        logger.info(f"Feature view already exists or another error occurred: {e}")
 
+    # Retrieve the feature view
     feature_store = get_feature_store()
     feature_view = feature_store.get_feature_view(
         name=feature_view_metadata.name,
