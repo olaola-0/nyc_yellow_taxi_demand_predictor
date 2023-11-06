@@ -32,3 +32,5 @@ FEATURE_VIEW_METADATA = FeatureViewConfig(
 )
 
 MODEL_NAME = "yellow_taxi_demand_predictor_next_hour"
+
+MAX_MAE = 10.0
