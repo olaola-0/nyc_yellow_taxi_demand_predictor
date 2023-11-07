@@ -63,6 +63,60 @@ def validate_raw_data(rides: pd.DataFrame, year: int, month: int) -> pd.DataFram
 
     return rides
 
+
+def fetch_ride_events_from_data_warehouse(from_date: datetime, to_date: datetime) -> pd.DataFrame:
+    """
+    Fetches ride events from a data warehouse within the specified date range.
+    The function simulates production data by retrieving historical data from
+    the same date range but from the previous year (52 weeks ago).
+
+    Parameters:
+    from_date (datetime): The start date of the range to fetch ride events.
+    to_date (datetime): The end date of the range to fetch ride events.
+
+    Returns:
+    pd.DataFrame: A DataFrame containing the ride events from the data warehouse,
+                  with the datetime shifted to simulate current data.
+
+    The function checks if the start and end dates are within the same month
+    and year after shifting back by one year. If they are, it loads a single
+    month's data file. If not, it loads two separate files for the two different
+    months and concatenates them. After loading, it shifts the 'pickup_datetime'
+    of the rides by one year to the present to simulate production data.
+    
+    The data is then sorted by 'pickup_location_id' and 'pickup_datetime' before
+    being returned.
+    """
+    
+    # Calculate the equivalent dates from 52 weeks ago
+    from_date_ = from_date - timedelta(days=7*52)
+    to_date_ = to_date - timedelta(days=7*52)
+    print(f'Fetching historical ride events from {from_date_} to {to_date_} to simulate data from {from_date} to {to_date}')
+
+    # Check if the adjusted from and to dates are within the same year and month
+    if (from_date_.year == to_date_.year) and (from_date_.month == to_date_.month):
+        # download 1 file of data only
+        rides = load_raw_data(year=from_date_.year, months=[from_date_.month])  # Corrected argument
+        rides = rides[rides.pickup_datetime >= from_date_]
+        rides = rides[rides.pickup_datetime < to_date_]
+
+    else:
+        # download 2 files from website
+        rides = load_raw_data(year=from_date_.year, months=[from_date_.month])  # Corrected argument
+        rides = rides[rides.pickup_datetime >= from_date_]
+        rides_2 = load_raw_data(year=to_date_.year, months=[to_date_.month])  # Corrected argument
+        rides_2 = rides_2[rides_2.pickup_datetime < to_date_]
+        rides = pd.concat([rides, rides_2])
+
+    # Shift the 'pickup_datetime' back 1 year ahead to simulate production data
+    rides['pickup_datetime'] += timedelta(days=7*52)
+
+    # Sort the data by 'pickup_location_id' and 'pickup_datetime'
+    rides.sort_values(by=['pickup_location_id', 'pickup_datetime'], inplace=True)
+
+    return rides
+
+
 def load_raw_data(year: int, months: Optional[List[int]] = None) -> pd.DataFrame:
     """
     Load raw taxi rides data for a given year and a list of months.
