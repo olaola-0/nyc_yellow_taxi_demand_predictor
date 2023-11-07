@@ -112,3 +112,34 @@ def get_or_create_feature_view(feature_view_metadata: FeatureViewConfig) -> hsfs
     )
 
     return feature_view
+
+
+# Instantiate the FeatureGroupConfig and FeatureViewConfig with the values from config.py
+FEATURE_GROUP_METADATA = FeatureGroupConfig(
+    name=config.FEATURE_GROUP_NAME,
+    version=config.FEATURE_GROUP_VERSION,
+    description='Feature group with hourly time-series data of historical taxi rides',
+    primary_key=['pickup_location_id', 'pickup_hour'],
+    event_time='pickup_hour'
+)
+
+FEATURE_VIEW_METADATA = FeatureViewConfig(
+    name=config.FEATURE_VIEW_NAME,
+    version=config.FEATURE_VIEW_VERSION,
+    feature_group=FEATURE_GROUP_METADATA
+)
+
+# Configuration for feature group & view predictions
+FEATURE_GROUP_PREDICTIONS_METADATA = FeatureGroupConfig(
+    name='model_predictions_feature_group',
+    version=1,
+    description="Predictions generate by our production model",
+    primary_key = ['pickup_location_id', 'pickup_hour'],
+    event_time='pickup_hour',
+)
+
+FEATURE_VIEW_PREDICTIONS_METADATA = FeatureViewConfig(
+    name='model_predictions_feature_view',
+    version=1,
+    feature_group=FEATURE_GROUP_PREDICTIONS_METADATA,
+)
