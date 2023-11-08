@@ -3,6 +3,7 @@ import hopsworks
 import pandas as pd
 import numpy as np
 import src.config as config
+from src.logger import get_logger  # Make sure to have logger set up
 from src.feature_store_api import get_or_create_feature_view, FEATURE_VIEW_METADATA, FEATURE_VIEW_PREDICTIONS_METADATA
 
 
@@ -52,6 +53,8 @@ def load_batch_of_features_from_store(current_date: datetime) -> pd.DataFrame:
     Returns:
         A DataFrame containing features for each pickup location up to the current date.
     """
+    logger = get_logger()
+
     # Number of historical features to fetch
     n_features = config.N_FEATURES
 
@@ -76,8 +79,20 @@ def load_batch_of_features_from_store(current_date: datetime) -> pd.DataFrame:
 
     # Check that the fetched data is complete
     location_ids = ts_data['pickup_location_id'].unique()
-    if len(ts_data) != config.N_FEATURES * len(location_ids):
-        raise ValueError("Time-series data is not complete. Make sure your feature pipeline is up and running.")
+    expected_row_count = config.N_FEATURES * len(location_ids)
+    actual_row_count = len(ts_data)
+    if actual_row_count != expected_row_count:
+        missing_data_info = f"Expected {expected_row_count} rows, but got {actual_row_count} rows."
+        logger.error(missing_data_info)
+        
+        # Log detailed information about which hours or location IDs might be missing
+        for location_id in location_ids:
+            location_data = ts_data[ts_data.pickup_location_id == location_id]
+            if len(location_data) != config.N_FEATURES:
+                logger.error(f"Location ID {location_id} has {len(location_data)} rows, expected {config.N_FEATURES}.")
+        
+        # Now raise the error with the additional info
+        raise ValueError(f"Time-series data is not complete. {missing_data_info} Make sure your feature pipeline is up and running.")
 
     # Sort the data by location ID and pickup hour
     ts_data.sort_values(by=['pickup_location_id', 'pickup_hour'], inplace=True)
