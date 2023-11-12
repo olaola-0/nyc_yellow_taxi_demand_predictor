@@ -1,3 +1,10 @@
+"""
+This Streamlit script creates an interactive dashboard for monitoring the performance of NYC yellow taxi demand prediction model.
+It visualizes the mean absolute error (MAE) of predictions both hourly and location-wise.
+The script utilizes caching to enhance performance and reduce data fetching time.
+Data visualization is handled using Plotly for an interactive user experience.
+"""
+
 from datetime import datetime, timedelta
 import numpy as np
 import pandas as pd
@@ -29,6 +36,10 @@ def _load_predictions_and_actual_values_from_store(from_date: datetime, to_date:
 
     Returns:
         pd.DataFrame: A DataFrame containing model predictions and actual values.
+        - 'pcikup_loction_id'
+        - 'predicted_demand'
+        - 'pickup_hour'
+        - 'rides'
     """
     return load_predictions_and_actual_values_from_store(from_date, to_date)
 
