@@ -1,4 +1,4 @@
-name: nyc-yellow-taxi-hourly-demand-feature-pipeline
+name: feature-pipeline
 
 on:
   schedule:
